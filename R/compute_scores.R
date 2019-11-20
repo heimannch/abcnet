@@ -61,13 +61,13 @@ get_scaffold <- function(scaffold, cois, gois){
 #' @param gois Genes of interest to be filtered.
 #' @return A dataframe with the ternary bins for each node and the ratio of samples in each group that map to the two upper tertiles.
 #'
-compute_abundance <- function(dfn, node, ids, exprv, group, cois, gois, byImmune = FALSE){
+compute_abundance <- function(dfn, node, ids, exprv, group, cois, gois){
 
   #renaming all the columns so they match the naming conventions in the functions
   #rename_cols(dfn, node, "Node")
   #rename_cols(dfn, ids, "SampleID")
-  rename_cols(dfn, exprv, "Value")
-  rename_cols(dfn, group, "Group")
+  #rename_cols(dfn, exprv, "Value")
+  #rename_cols(dfn, group, "Group")
   names(dfn)[match(node, names(dfn))] <- "Node"
   names(dfn)[match(ids, names(dfn))] <- "SampleID"
   names(dfn)[match(exprv, names(dfn))] <- "Value"
@@ -77,14 +77,14 @@ compute_abundance <- function(dfn, node, ids, exprv, group, cois, gois, byImmune
 
   df_ternary_full_info <- dfn %>%
     dplyr::group_by(Node) %>% tidyr::nest() %>% ## split by nodes
-    dplyr::mutate(Bins=purrr::map2(.x = Node,.y = data, tertiles = tertiles, byImmune = byImmune, .f = multiBin)) %>% ## add Bins
-    dplyr::mutate(RatioPerGroup=purrr::map(.x = Bins, byImmune = byImmune, .f = addPerGroupIncludes))
+    dplyr::mutate(Bins=purrr::map2(.x = Node,.y = data, tertiles = tertiles,.f = multiBin)) %>% ## add Bins
+    dplyr::mutate(RatioPerGroup=purrr::map(.x = Bins, .f = addPerGroupIncludes))
 
   df_ternary_full_info
 
 }
 
-compute_concordance <- function(scaffold, df_ternary_full_info, byImmune){
+compute_concordance <- function(scaffold, df_ternary_full_info){
   ##filter the scaffold for edges with data for both nodes
   scaffold <- scaffold %>%
     dplyr::filter(From %in% df_ternary_full_info$Node & To %in% df_ternary_full_info$Node)
@@ -95,9 +95,9 @@ compute_concordance <- function(scaffold, df_ternary_full_info, byImmune){
   names(ternary) <- df_ternary_full_info$Node ## contains all ternary bins
 
   scaffold_edge_score_full_info <- scaffold %>%
-    dplyr::mutate(PairBin=purrr::map2(.x = From, .y = To, ternary=ternary, byImmune = byImmune, .f=join_binned_pair)) %>% # add table of paired bins per sample
-    dplyr::mutate(PairTable=purrr::map(PairBin,byImmune = byImmune,tabulate_pair)) %>% ## add table of paired bin frequencies
-    dplyr::mutate(ratioScores=purrr::map(PairTable,byImmune = byImmune,getGroupRatioScores))# %>% ## add concordance ratio
+    dplyr::mutate(PairBin=purrr::map2(.x = From, .y = To, ternary=ternary,  .f=join_binned_pair)) %>% # add table of paired bins per sample
+    dplyr::mutate(PairTable=purrr::map(PairBin,tabulate_pair)) %>% ## add table of paired bin frequencies
+    dplyr::mutate(ratioScores=purrr::map(PairTable,getGroupRatioScores))# %>% ## add concordance ratio
 
   scaffold_edge_score <- scaffold_edge_score_full_info %>% dplyr::select(From,To,ratioScores) %>% tidyr::unnest(cols=c(ratioScores))
 

@@ -42,18 +42,13 @@ getbin <- function(value,node_label, tertiles){
 ## s: node name
 ## df: data frame of ParticipantBarcode,Group,Value
 ## requires tertiles for getbin function
-multiBin <- function(s,df,tertiles, byImmune = FALSE){
+multiBin <- function(s,df,tertiles, byTwoGroups = FALSE){
 
   vals <- df$Value
   beans <- getbin(vals,s, tertiles)
 
-  if(byImmune == FALSE){
-    tibble(SampleID=df$SampleID,
-           Group=df$Group,Bin=beans)
-  }else{
-    tibble(SampleID=df$SampleID,
-           Group=df$Group, Immune = df$Immune, Bin=beans)
-  }
+  tibble(SampleID=df$SampleID,
+         Group=df$Group,Bin=beans)
 
 }
 
@@ -61,19 +56,13 @@ multiBin <- function(s,df,tertiles, byImmune = FALSE){
 ## Acts on a df ParticipantBarcode,Group,Bin
 ## Intermediate steps calculate bin fractions
 ## Outputs df with Group, and Include, where latter is logical
-addPerGroupIncludes <- function(df, byImmune = FALSE){
+addPerGroupIncludes <- function(df){
 
-  if(byImmune == FALSE){
     ratios <- df %>% group_by(Group) %>% tidyr::nest() %>% ## split by Group, now have tibble with one row per Group; tibble named data; has ParticipantBarcode, Bin
       mutate(BinDistribution=purrr::map(data,unibin)) %>% ## add BinDistribution tibble with frequency of samples in each tertile bin
       mutate(UpBinRatio=purrr::map_dbl(BinDistribution,upbinfrac)) %>% ## add UpBinRatio with ratio of upper two bins to all (three) bins
       select(Group,UpBinRatio) %>% arrange(Group)
-  }else{
-    ratios <- df %>% group_by(Group, Immune) %>% tidyr::nest() %>%
-      mutate(BinDistribution=purrr::map(data,unibin)) %>%
-      mutate(UpBinRatio=purrr::map_dbl(BinDistribution,upbinfrac)) %>%
-      select(Group, Immune, UpBinRatio) #%>% arrange(Group)
-  }
+
   return(ratios)
 }
 
@@ -86,26 +75,18 @@ join_binned_pair <- function(
   NodeB,
   ternary,
   group_column = "Group",
-  id_column = "SampleID",
-  byImmune = FALSE){
+  id_column = "SampleID"){
 
   assert_list_has_names(ternary,c(NodeA,NodeB))
 
-  if(byImmune == FALSE){
-    dplyr::inner_join(ternary[[NodeA]],ternary[[NodeB]],by=c(id_column,group_column)) %>%
-      dplyr::select(-id_column)
-  }else{
-    dplyr::inner_join(ternary[[NodeA]],ternary[[NodeB]],by=c(id_column,group_column, "Immune")) %>%
-      dplyr::select(-id_column)
-  }
+  dplyr::inner_join(ternary[[NodeA]],ternary[[NodeB]],by=c(id_column,group_column)) %>%
+    dplyr::select(-id_column)
 }
 
-tabulate_pair <- function (df, byImmune = FALSE){
-  if(byImmune == FALSE){
+tabulate_pair <- function (df){
+
     df %>% group_by(Group) %>% tidyr::nest() %>% mutate(t=purrr::map(data,table)) %>% select(Group,t)
-  }else{
-    df %>% group_by(Group, Immune) %>% tidyr::nest() %>% mutate(t=purrr::map(data,table)) %>% select(Group,Immune,t)
-  }
+
 }
 
 ## diagonal over off-diagonal cross-tabulated bin counts
@@ -118,17 +99,12 @@ getRatioScore <- function(Xtab,pseudocount=1){
   ratioScore
 }
 
-getGroupRatioScores <- function(pt, byImmune = FALSE){
+getGroupRatioScores <- function(pt){
 
-  if(byImmune == FALSE){
     pt %>% ungroup() %>% mutate(ratioScore=purrr::map(t,getRatioScore)) %>%
       transmute(Group,ratioScore=as.numeric(ratioScore)) %>%
       arrange(Group)
-  }else{
-    pt %>% ungroup() %>% mutate(ratioScore=purrr::map(t,getRatioScore)) %>%
-      transmute(Group, Immune, ratioScore=as.numeric(ratioScore)) %>%
-      arrange(Group)
-  }
+
 }
 
 
