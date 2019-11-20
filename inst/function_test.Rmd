@@ -1,0 +1,163 @@
+#testing the functions
+```{r}
+library(abcnet)
+library(dplyr)
+```
+
+
+```{r}
+#Loading data
+group_df=read_tsv("inst/data/PanImmune_FMx_ImmuneSubtypes.tsv")
+group_col="Subtype_Immune_Model_Based"
+
+## Read available gene expression data
+dfe_in <- read_tsv("inst/data/GenExp_All_CKine_genes.tsv")
+## Read file with available cell data
+dfc_in <- read_tsv("inst/data/PanImmune_FMx.tsv")
+
+## Read scaffold interaction file and node type file
+node_type <- read_tsv("inst/data/network_node_labels.tsv")
+scaffold <- read_tsv("inst/data/try_3a.tsv")
+
+##Read file with cells and genes of interest
+cois <- read_lines("inst/data/cells_of_interest.txt")
+gois <- read_lines("inst/data/immunomodulator_genes.txt")
+```
+
+
+```{r filtering the scaffold}
+#Updating the list of genes of interest based on the gene expression data available
+gois <- intersect(gois, colnames(dfe_in))
+
+# Selecting the edges in the scaffold that have at least one gois, and a cois connected to a gois
+filtered_scaffold <- abcnet::get_scaffold(scaffold, cois, gois)
+
+#let's update the list of genes of interest with all genes that are present in the filtered scaffold
+gois <- union(filtered_scaffold$From, filtered_scaffold$To) %>% intersect(colnames(dfe_in))
+```
+
+
+The functions to compute the scores take the cell data and gene expression data in the tidy format. 
+Each row of the measurement data should contain, at least, the following columns:
+- a sample ID
+- the node
+- the expression value
+- group of this sample ID
+
+Our input data is not in this format right now. As a first step, let's organize the data.
+
+```{r tidying up the data}
+
+#organizing the combination of participant and grouping variable
+participants <- group_df$ParticipantBarcode
+  groups <- group_df[[group_col]]
+  group_of_participant <- groups ; names(group_of_participant) <- participants
+  
+#The cell data is in a specific column, so here we are selecting it  
+dfc <- dfc_in %>% #filter(ParticipantBarcode %in% participants) %>%
+    select(ParticipantBarcode,paste(cois,".Aggregate2",sep=""))
+
+colnames(dfc) <- gsub(".Aggregate2","",colnames(dfc))
+
+#Now, we include the group annotation for each sample
+dfc <- dfc %>% 
+  dplyr::mutate(Group=group_of_participant[ParticipantBarcode]) 
+
+#Transforming each observation in one row (ie, making a long table)
+dfclong <- dfc %>% tidyr::gather(Cell,Cell_Fraction,-c(ParticipantBarcode,Group))
+
+#This step is optional - we are just adding some noise to the measurement
+dfclong <- dfclong %>% dplyr::mutate(Cell_Fraction=Cell_Fraction+rnorm(mean=0, sd=0.0001,nrow(.)))
+
+dfclong.generic <- dfclong %>% rename(Node=Cell,Value=Cell_Fraction)
+
+tail(dfclong.generic)
+
+```
+```{r}
+
+dfelong <- dfe_in %>% tidyr::gather(Gene,Expression,-ParticipantBarcode)
+dfelong <- dfelong %>% dplyr::mutate(ExpLog2 = log2(Expression+1)+rnorm(mean=0, sd=0.0001,nrow(.))) %>%
+  dplyr::select(ParticipantBarcode,Gene,Expression=ExpLog2) %>%
+  dplyr::mutate(Group=group_of_participant[ParticipantBarcode])
+
+dfelong.generic <- dfelong %>% rename(Node=Gene,Value=Expression)
+
+dfn <- dplyr::bind_rows(dfelong.generic, dfclong.generic)
+
+head(dfn)  
+
+```
+
+The cell and gene data is in the format to be used for computing the thresholds.
+- a sample ID: ParticipantBarcode
+- the node: Node
+- the expression value: Value
+- group of this sample ID: Group
+
+
+#Compute info for abundance scores for all nodes in the scaffold
+```{r}
+nodes_scores <- abcnet::compute_abundance(dfn, node= "Node", ids = "ParticipantBarcode", expr = "Value", group = "Group", cois = cois, gois = gois)
+
+nodes_scores$Node[1]
+nodes_scores$RatioPerGroup[[1]]
+```
+
+This is the ratio of samples in each group that have the expression of the gene A2M mapping to the upper two tertiles.
+The output dataframe of this function is formatted in a way that makes it easier to compute the scores of the edges, in the next section.
+
+
+To better organize the table with the abundance scores for each node and group combination, we can creat a new object:
+```{r}
+abundance_scores <- nodes_scores %>% dplyr::select(Node, IncludeFeature) %>% tidyr::unnest(c(IncludeFeature))
+
+head(abundance_scores)
+```
+
+
+#Compute the concordance scores for the edges in the filtered scaffold
+```{r}
+edges_scores <- abcnet::compute_concordance(filtered_scaffold, nodes_scores, FALSE)
+
+head(edges_scores)
+```
+
+#Example 2: creating a random dataset to see if it works
+
+```{r}
+#Creating 50 random patients IDs
+SampleIDs <-  as.data.frame(do.call(paste0, replicate(5, sample(LETTERS, 100, TRUE), FALSE)))
+colnames(SampleIDs) <- "SampleID"
+
+#Creating 2 random groups for the SampleIDs
+group <- c("G1", "G2")
+
+SampleIDs <- SampleIDs %>% 
+  mutate(Group = sample(group, nrow(.), replace = TRUE))
+
+#Selecting 6 genes IDs to be used in the computation
+Nodes <- c("BTLA","VTCN1","CANX","CCL5","HLA-B","TNFRSF14")
+
+expr_data <- merge(SampleIDs, Nodes)
+expr_data <- expr_data %>% 
+  dplyr::mutate(value = rnorm(mean = 10, sd = 1.5, nrow(.)))
+
+head(expr_data)
+```
+
+Computing the abundance scores
+```{r}
+nodes_abundance <- abcnet::compute_abundance(expr_data, "y", "SampleID", "value", "Group", cois, gois)
+
+nodes_abundance$Node[1]
+nodes_abundance$RatioPerGroup[[1]]
+```
+
+Computing the edges scores
+```{r}
+edges_concordance <- abcnet::compute_concordance(filtered_scaffold, nodes_abundance, byImmune = FALSE)
+
+edges_concordance
+```
+
