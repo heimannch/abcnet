@@ -58,10 +58,10 @@ multiBin <- function(s,df,tertiles, byTwoGroups = FALSE){
 ## Outputs df with Group, and Include, where latter is logical
 addPerGroupIncludes <- function(df){
 
-    ratios <- df %>% group_by(Group) %>% tidyr::nest() %>% ## split by Group, now have tibble with one row per Group; tibble named data; has ParticipantBarcode, Bin
-      mutate(BinDistribution=purrr::map(data,unibin)) %>% ## add BinDistribution tibble with frequency of samples in each tertile bin
-      mutate(UpBinRatio=purrr::map_dbl(BinDistribution,upbinfrac)) %>% ## add UpBinRatio with ratio of upper two bins to all (three) bins
-      select(Group,UpBinRatio) %>% arrange(Group)
+    ratios <- df %>% dplyr::group_by(Group) %>% tidyr::nest() %>% ## split by Group, now have tibble with one row per Group; tibble named data; has ParticipantBarcode, Bin
+      dplyr::mutate(BinDistribution=purrr::map(data,unibin)) %>% ## add BinDistribution tibble with frequency of samples in each tertile bin
+      dplyr::mutate(UpBinRatio=purrr::map_dbl(BinDistribution,upbinfrac)) %>% ## add UpBinRatio with ratio of upper two bins to all (three) bins
+      dplyr::select(Group,UpBinRatio) %>% dplyr::arrange(Group)
 
   return(ratios)
 }
@@ -101,9 +101,9 @@ getRatioScore <- function(Xtab,pseudocount=1){
 
 getGroupRatioScores <- function(pt){
 
-    pt %>% ungroup() %>% mutate(ratioScore=purrr::map(t,getRatioScore)) %>%
-      transmute(Group,ratioScore=as.numeric(ratioScore)) %>%
-      arrange(Group)
+    pt %>% dplyr::ungroup() %>% dplyr::mutate(ratioScore=purrr::map(t,getRatioScore)) %>%
+      dplyr::transmute(.data$Group,ratioScore=as.numeric(ratioScore)) %>%
+      dplyr::arrange(.data$Group)
 
 }
 

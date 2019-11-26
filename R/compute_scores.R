@@ -4,6 +4,8 @@
 #   Check Package:             'Cmd + Shift + E'
 #   Test Package:              'Cmd + Shift + T'
 
+#' @importFrom magrittr %>%
+
 ##-----Organizing scaffold, based on initial scaffold and available data
 #' Filter edges from a scaffold based on cells and genes of interest.
 #'
@@ -77,22 +79,30 @@ compute_abundance <- function(dfn, node, ids, exprv, group, cois, gois){
 
   df_ternary_full_info <- dfn %>%
     dplyr::group_by(Node) %>% tidyr::nest() %>% ## split by nodes
-    dplyr::mutate(Bins=purrr::map2(.x = Node,.y = data, tertiles = tertiles,.f = multiBin)) %>% ## add Bins
-    dplyr::mutate(RatioPerGroup=purrr::map(.x = Bins, .f = addPerGroupIncludes))
+    dplyr::mutate(Bins=purrr::map2(.x = .data$Node, .y = .data$data, tertiles = tertiles,.f = multiBin)) %>% ## add Bins
+    dplyr::mutate(RatioPerGroup=purrr::map(.x = .data$Bins, .f = addPerGroupIncludes))
 
   df_ternary_full_info
 
 }
 
-compute_concordance <- function(scaffold, df_ternary_full_info){
+
+##-----Concordance scores
+#' Compute the concordance scores of nodes in a network
+#'
+#' @param scaffold A dataframe with a scaffold interaction in each row. Columns should be named "From" and "To".
+#' @param nodes_info A dataframe with the ternary bins for each node and the ratio of samples in each group that map to the two upper tertiles. Use the output dataframe from compute_abundance function.
+#' @return A dataframe with the concordance score for each edge in the scaffold.
+#'
+compute_concordance <- function(scaffold, nodes_info){
   ##filter the scaffold for edges with data for both nodes
   scaffold <- scaffold %>%
-    dplyr::filter(From %in% df_ternary_full_info$Node & To %in% df_ternary_full_info$Node)
+    dplyr::filter(From %in% nodes_info$Node & To %in% nodes_info$Node)
 
   ## Lists ternary for easier referencing
-  ternary <- as.list(df_ternary_full_info$Bins)
+  ternary <- as.list(nodes_info$Bins)
 
-  names(ternary) <- df_ternary_full_info$Node ## contains all ternary bins
+  names(ternary) <- nodes_info$Node ## contains all ternary bins
 
   scaffold_edge_score_full_info <- scaffold %>%
     dplyr::mutate(PairBin=purrr::map2(.x = From, .y = To, ternary=ternary,  .f=join_binned_pair)) %>% # add table of paired bins per sample
@@ -107,5 +117,43 @@ compute_concordance <- function(scaffold, df_ternary_full_info){
 
 }
 
+##-----Consolidate nodes table
+#' Consolidate the nodes abundance score in a dataframe ready to be saved to file.
+#'
+#' @param nodes_info A dataframe with the ternary bins for each node and the ratio of samples in each group that map to the two upper tertiles. Use the output dataframe from compute_abundance function.
+#' @return A dataframe with abundance score for all nodes across all groups.
+#'
+get_abundance_table <- function(nodes_info){
 
+  try(if(!identical(colnames(nodes_info), c("Node", "data", "Bins", "RatioPerGroup")))
+    stop ("Names in nodes_info should be 'Node', 'data', 'Bins', 'RatioPerGroup'."))
+
+  nodes_info %>% dplyr::select(Node, RatioPerGroup) %>% tidyr::unnest(c(RatioPerGroup))
+
+}
+
+##-----Filter network based on abundance and concordance scores
+#' Filter the edges table to nodes above a given abundance ratio and edges above a given concordance level.
+#'
+#' @param nodes_scores A dataframe with abundance score for all nodes across all groups. Use the output dataframe from get_abundance_table function.
+#' @param edges_scores A dataframe with the concordance score for each edge in the scaffold. Use the output dataframe from compute_concordance function.
+#' @param abundance The abundance threshold to filter nodes. Should be between 0 and 1.
+#' @param concordance The concordance threshold to filter edges. Only positive values.
+#' @return A dataframe with all nodes with UpBinRatio above the abundance threshold and edges with ratioScores above the concordance threshold.
+#'
+
+filter_network <- function(nodes_scores, edges_scores, abundance, concordance){
+
+  ab_nodes <- nodes_scores %>%
+    dplyr::filter(UpBinRatio > abundance)
+
+  network <- edges_scores %>%
+    merge(ab_nodes, by.x = c("From", "Group"), by.y = c("Node", "Group")) %>% #filtering nodes that are abundant
+    merge(ab_nodes, by.x = c("To", "Group"), by.y = c("Node", "Group")) %>% #filtering nodes that are abundant
+    dplyr::filter(ratioScore > concordance) %>% #filtering concordant edges
+    dplyr::select(From, To, Group, ratioScore) %>%
+    as.data.frame()
+
+  network
+}
 
