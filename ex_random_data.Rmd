@@ -1,0 +1,114 @@
+---
+title: "Computing the Cytokine Network with Random Data"
+author: "Carolina Heimann"
+output: html_document
+---
+
+# 1. Preparing the input data
+
+ 
+## 1.1. Uploading the scaffold data and filtering it to cells and genes of interest
+
+```{r}
+library(dplyr)
+scaffold <- readr::read_tsv("inst/extdata/try_3a.tsv")
+```
+
+The construction of the network is limited to the nodes that we have data for (more about this in the next section). In addition, we can narrow down the network to a set of cells and genes of interest. 
+```{r}
+cois <- c("B_cells", "T_cells_CD4", "Dendritic_cells")
+
+gois <- c("CANX","CCL5", "IL1B", "FGG", "ITGAL", "ITGB6", "LGALS9", "LAG3", "CXCL9", "IL10", "IFNAR1", "IL10RB", "KIR2DS4", "CD28","BTLA","VTCN1","HLA-B","TNFRSF14", "HLA-A")
+```
+
+
+It is possible to filter the scaffold based on the selection of cells and genes of interest.
+```{r}
+filtered_scaffold <- abcnet::get_scaffold(scaffold, cois, gois)
+```
+
+This filter selects all edges with at least one gene of interest and all edges that connect a cell of interest to a gene of interest. 
+That said, it is plausible that genes outside the `gois` object are included in the `filtered_scaffold`, requiring an update in the list of the genes of interest.
+
+```{r}
+gois <- union(filtered_scaffold$From, filtered_scaffold$To) %>% setdiff(cois)
+```
+
+## 1.2. Creating a random gene expression dataset
+
+```{r}
+#Creating 50 random patients IDs
+SampleIDs <-  as.data.frame(do.call(paste0, replicate(5, sample(LETTERS, 100, TRUE), FALSE)))
+colnames(SampleIDs) <- "SampleID"
+
+#Creating 2 random groups for the SampleIDs
+group <- c("G1", "G2")
+
+SampleIDs <- SampleIDs %>% 
+  mutate(Group = sample(group, nrow(.), replace = TRUE))
+
+#Listing genes and cells IDs and creating random expression data
+Nodes <- c("BTLA","VTCN1","CANX","CCL5","HLA-B","TNFRSF14", "B_cells")
+
+expr_data <- merge(SampleIDs, Nodes)
+expr_data <- expr_data %>% 
+  dplyr::mutate(value = rnorm(mean = 10, sd = 5, nrow(.)))
+
+head(expr_data)
+```
+In this random dataset, we have 50 SampleIDs, each mapping to a specific group G1 or G2. Each row of this dataset contains the expression value/cell estimate of a gene or cell (y column) for a given Sample ID. This dataframe is in the tidy format required by the functions to compute abundance and concordance scores.
+
+# 2. Computing the network scores
+
+## 2.1. Computing the abundance scores
+
+The function `abcnet::compute_abundance` computes the abundance score for the nodes in a network.
+
+```{r}
+nodes_abundance <- abcnet::compute_abundance(expr_data, node = "y", ids = "SampleID", exprv = "value", group = "Group", cois, gois)
+
+nodes_abundance$Node[1]
+nodes_abundance$RatioPerGroup[[1]]
+```
+
+The `nodes_abundance` dataframe is formatted in a way to make it easier to compute the concordance scores for the edges. To create an object in a format that is easier to export, we can use the `get_abundance_table` function: 
+```{r}
+#Organizing the abundance scores for exporting it
+nodes_table <- abcnet::get_abundance_table(nodes_abundance)
+
+head(nodes_table)
+```
+
+
+## 2.2. Computing the edges scores
+
+To compute the concordance scores of the edges, we just need the scaffold of interest and the nodes scores, as computed by the `compute_abundance` function.
+
+```{r}
+edges_concordance <- abcnet::compute_concordance(filtered_scaffold, nodes_abundance)
+
+edges_concordance
+```
+
+## 2.3. Filtering the network based on abundance and concordance thresholds
+
+Especially in the case of networks with hundreds of edges, you may be interested only in nodes and edges with higher values of, respectively, abundance and concordances scores. In this case, you can filter the `edges_concordance` dataframe based on values of your interest.
+
+```{r}
+filtered_network <- abcnet::filter_network(nodes_table, edges_concordance, abundance = 0.6, concordance = 1)
+
+head(filtered_network)
+```
+
+The `filtered_network` object contains the edges from the `edges_concordance` dataframe that meet the following criteria:
+- both nodes have a abundance score higher than the selected `abundance` threshold. 
+- edges with concordance score higher than the the selected `concordance` threshold.
+
+# 3. Exporting network to file
+
+The object `filtered_network` can be exported and used in softwares for network visualizations, such as Cytoscape https://cytoscape.org/
+
+```{r}
+readr::write_tsv(filtered_network, paste("edges_", Sys.Date(),".tsv", sep = ""))
+```
+

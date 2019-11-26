@@ -4,21 +4,17 @@
 \alias{compute_abundance}
 \title{Compute the abundance scores of nodes in a network}
 \usage{
-compute_abundance(dfn, node, ids, expr, group, cois, gois, byImmune = FALSE)
+compute_abundance(dfn, node, ids, exprv, group, cois, gois)
 }
 \arguments{
-\item{dfn}{A dataframe with the cell abundance and gene expression values, in a tidy format.
-Each row of the measurement data should contain, at least, the following columns:
-- a sample ID
-- the node
-- the expression value
-- group of this sample ID}
+\item{dfn}{A dataframe with the cell abundance and gene expression values, in a tidy format. Each row of the measurement data should contain, at least,
+the following columns: a sample ID; node ID; expression value of this node for this sample; group of this sample ID.}
 
 \item{node}{Name of the column with the nodes names.}
 
 \item{ids}{Name of the column with the ID of each sample.}
 
-\item{expr}{Name of the column with the expression data.}
+\item{exprv}{Name of the column with the value of expression data.}
 
 \item{group}{Name of the column with the group information of the sample.}
 
@@ -27,7 +23,7 @@ Each row of the measurement data should contain, at least, the following columns
 \item{gois}{Genes of interest to be filtered.}
 }
 \value{
-A dataframe with the ternary bins for each node and the ratio of sample in each group that map to the two upper tertiles.
+A dataframe with the ternary bins for each node and the ratio of samples in each group that map to the two upper tertiles.
 }
 \description{
 Compute the abundance scores of nodes in a network

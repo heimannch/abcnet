@@ -6,7 +6,7 @@ output:
 #testing the functions
 ```{r}
 #library(abcnet)
-library(dplyr)
+#library(dplyr)
 ```
 
 #Example 1: Using the TCGA Data
@@ -113,13 +113,13 @@ nodes_scores$RatioPerGroup[[1]]
 ```
 
 This is the ratio of samples in each group that have the expression of the gene A2M mapping to the upper two tertiles.
-The output dataframe of this function is formatted in a way that makes it easier to compute the scores of the edges, in the next section.
+The output dataframe of this function is formatted in a way that makes it easier to compute the scores of the edges, in section 1.4.
 
 
 To better organize the table with the abundance scores for each node and group combination, we can creat a new object:
 ```{r}
-abundance_scores <- nodes_scores %>% dplyr::select(Node, RatioPerGroup) %>% tidyr::unnest(c(RatioPerGroup))
-
+#abundance_scores <- nodes_scores %>% dplyr::select(Node, RatioPerGroup) %>% tidyr::unnest(c(RatioPerGroup))
+abundance_scores <- abcnet::get_abundance_table(nodes_scores)
 head(abundance_scores)
 ```
 
@@ -156,7 +156,7 @@ Nodes <- c("BTLA","VTCN1","CANX","CCL5","HLA-B","TNFRSF14")
 
 expr_data <- merge(SampleIDs, Nodes)
 expr_data <- expr_data %>% 
-  dplyr::mutate(value = rnorm(mean = 10, sd = 1.5, nrow(.)))
+  dplyr::mutate(value = rnorm(mean = 10, sd = 5, nrow(.)))
 
 head(expr_data)
 ```
@@ -167,11 +167,14 @@ nodes_abundance <- abcnet::compute_abundance(expr_data, "y", "SampleID", "value"
 
 nodes_abundance$Node[1]
 nodes_abundance$RatioPerGroup[[1]]
+
+#Organizing the abundance scores for exporting it
+nodes_table <- abcnet::get_abundance_table(nodes_abundance)
 ```
 
 Computing the edges scores
 ```{r}
-edges_concordance <- abcnet::compute_concordance(filtered_scaffold, nodes_abundance, byImmune = FALSE)
+edges_concordance <- abcnet::compute_concordance(filtered_scaffold, nodes_abundance)
 
 edges_concordance
 ```
