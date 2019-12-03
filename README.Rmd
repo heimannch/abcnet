@@ -19,6 +19,7 @@ knitr::opts_chunk$set(
 <!-- badges: end -->
 
 The goal of abcnet is to compute scores for a abundant-concordant cytokine network. 
+This code is an adaptation of Vésteinn Thorsson, ISB, code redo of 2017 code of David Gibbs, ISB
 
 ## Installation
 
