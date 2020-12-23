@@ -23,7 +23,7 @@ upbinfrac  <- function(v){(as.numeric(v[2]+v[3])/sum(v))} ## for 3-vector, ratio
 
 ## Get tertiles for each node
 getNodeTertiles <- function(df){
-  quantz <- df %>% group_by(Node) %>% summarise(q0=quantile(Value,0,na.rm=T),
+  quantz <- df %>% dplyr::group_by(Node) %>% dplyr::summarise(q0=quantile(Value,0,na.rm=T),
                                                 q33=quantile(Value,0.33,na.rm=T),
                                                 q66=quantile(Value,0.66,na.rm=T),
                                                 q1=quantile(Value,1,na.rm=T))
@@ -85,7 +85,7 @@ join_binned_pair <- function(
 
 tabulate_pair <- function (df){
 
-    df %>% group_by(Group) %>% tidyr::nest() %>% mutate(t=purrr::map(data,table)) %>% select(Group,t)
+    df %>% dplyr::group_by(Group) %>% tidyr::nest() %>% dplyr::mutate(t=purrr::map(data,table)) %>% dplyr::select(Group,t)
 
 }
 
